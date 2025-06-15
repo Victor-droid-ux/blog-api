@@ -1,7 +1,7 @@
 const http = require('http');
 const app = require('./app');
 
-const {port} = require('./config/kyes');
+const { port } = require('./config/kyes');
 
 // Create an HTTP server using the Express app
 const server = http.createServer(app);
@@ -10,9 +10,9 @@ const server = http.createServer(app);
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
-// server.on('error', (error) => {
-//   console.error(`Server error: ${error.message}`);
-// });
+server.on('error', (error) => {
+  console.error(`Server error: ${ error.message }`);
+});
 // server.on('close', () => {
 //   console.log('Server is closing');
 // });
