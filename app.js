@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
-dotenv.config();
+require ('dotenv').config();
 
 const connectToMongoDB = require('./init/mongodb');
 const { authRoute } = require("./routes");
