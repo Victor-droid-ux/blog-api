@@ -4,5 +4,7 @@
     "hashedpassword",
     "hashpassword",
     "virtuals"
-  ]
+  ],
+  "editor.fontFamily": "'Fira Code', Consolas, 'Courier New', monospace",
+  "C_Cpp.vcFormat.newLine.beforeOpenBrace.type": "sameLine"
 }

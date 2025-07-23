@@ -1,4 +1,5 @@
-const { check } = require("express-validator");
+const { check, param } = require("express-validator");
+const mongoose = require("mongoose");
 
 const addCategoryValidator = [
   check("title")
@@ -14,4 +15,13 @@ const addCategoryValidator = [
     .withMessage("Name must be at least 3 characters long"),
 ];
 
-module.exports = { addCategoryValidator };
+const idValidator = [
+  param("id").custom((id) => {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error("Invalid category id");
+    }
+    return true; // Important to return true if valid
+  }),
+];
+
+module.exports = { addCategoryValidator, idValidator };
