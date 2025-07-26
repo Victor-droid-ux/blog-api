@@ -1,39 +1,33 @@
 const multer = require("multer");
-const path = require("path");
-const generateCode = require("../utils/generateCode");
 
-// ✅ Define storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname); // file extension
-    const baseName = path.basename(file.originalname, ext); // filename without extension
-    const safeBaseName = baseName.replace(/\s+/g, "_").toLowerCase(); // remove spaces, lowercase
-    const code = generateCode(12); // random code (like a hash)
+// ✅ Allowed MIME types
+const allowedMimetypes = [
+  "image/jpeg",
+  "image/png",
+  "image/jpg",
+  "application/pdf",
+  "audio/mpeg", // .mp3
+  "audio/wav", // .wav
+  "audio/mp4", // .m4a or .mp4 audio
+  "video/mp4", // .mp4
+  "video/mpeg", // .mpeg
+  "video/x-matroska", // .mkv
+];
 
-    const uniqueName = `${Date.now()}-${safeBaseName}-${code}${ext}`;
-    cb(null, uniqueName);
-  },
-});
+// ✅ File filter
+const fileFilter = (req, file, cb) => {
+  if (allowedMimetypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error("Invalid file type: " + file.mimetype), false);
+  }
+};
 
-// ✅ Set up multer upload
+// ✅ Multer config using memoryStorage
 const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [".jpg", ".jpeg", ".png", ".pdf"];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(
-        new Error("Only .jpg, .jpeg, .png, and .pdf files are allowed"),
-        false
-      );
-    }
-  },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  storage: multer.memoryStorage(), // Don't pass destination or filename here
+  fileFilter,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB per file
 });
 
 module.exports = upload;

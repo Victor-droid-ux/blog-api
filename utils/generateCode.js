@@ -1,4 +1,4 @@
-const generatecode = (codelength = 6) => {
+const generateCode = (codelength = 6) => {
     let code = '';
     const characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     for (let i = 0; i < codelength; i++) {
@@ -27,4 +27,4 @@ const generatecode = (codelength = 6) => {
     
     return code;
 }
-module.exports = generatecode;
+module.exports = generateCode;
