@@ -1,4 +1,10 @@
-const { PutObjectCommand, S3Client } = require("@aws-sdk/client-s3");
+const {
+  PutObjectCommand,
+  S3Client,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const path = require("path");
 const generateCode = require("../utils/generateCode");
 const {
@@ -23,6 +29,7 @@ const uploadMultipleFiles = async ({ files }) => {
         .basename(file.originalname, ext)
         .replace(/\s+/g, "_")
         .toLowerCase();
+
       const fileName = `${Date.now()}-${safeBaseName}-${generateCode(8)}${ext}`;
 
       const params = {
@@ -37,48 +44,74 @@ const uploadMultipleFiles = async ({ files }) => {
         const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${awsRegion}.amazonaws.com/${fileName}`;
 
         return {
-          status: "fulfilled",
-          value: {
-            originalName: file.originalname,
-            filename: fileName,
-            url: fileUrl,
-            size: file.size,
-            mimetype: file.mimetype,
-          },
+          originalName: file.originalname,
+          filename: fileName,
+          key: fileName, // 💥 Add this line
+          url: fileUrl,
+          size: file.size,
+          mimetype: file.mimetype,
+          contentType: file.mimetype, // Optional for schema
+          status: "uploaded",
         };
       } catch (err) {
         console.error("❌ Failed to upload:", file.originalname, err);
         return {
-          status: "rejected",
-          reason: err.message,
-          file: file.originalname,
+          originalName: file.originalname,
+          filename: fileName,
+          key: fileName, // 💥 Again, add this
+          size: file.size,
+          mimetype: file.mimetype,
+          url: null,
+          status: "failed",
+          error: err.message,
         };
       }
     })
   );
 
-  const successful = uploadResults
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => r.value);
-
-  const failed = uploadResults
-    .filter((r) => r.status === "rejected")
-    .map((r) => ({
-      file: r.file,
-      reason: r.reason,
-    }));
-
-  if (failed.length > 0) {
-    console.warn("⚠️ Some files failed to upload:", failed);
-    throw {
-      status: 500,
-      message: "One or more file uploads failed",
-      failed,
-      uploaded: successful,
-    };
-  }
-
-  return successful;
+  return uploadResults.map((res) =>
+    res.status === "fulfilled" ? res.value : res.value
+  );
 };
 
-module.exports = { uploadMultipleFiles };
+// Generate signed URL
+const signedUrl = async (key) => {
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+    Expires: 60 * 60, // 60 minutes
+  };
+
+  const command = new GetObjectCommand(params);
+
+  try {
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    return url;
+  } catch (err) {
+    console.error("❌ Error generating signed URL:", err);
+    throw new Error("Failed to generate signed URL");
+  }
+};
+
+const deleteFileFromS3 = async (key) => {
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+  };
+
+  const command = new DeleteObjectCommand(params);
+
+  try {
+    await s3Client.send(new DeleteObjectCommand(params));
+    return { status: true, message: "File deleted successfully" };
+  } catch (err) {
+    console.error("❌ Error deleting file:", err);
+    throw new Error("Failed to delete file");
+  }
+};
+
+module.exports = {
+  uploadMultipleFiles,
+  signedUrl,
+  deleteFileFromS3,
+};

@@ -4,19 +4,34 @@ const fileSchema = new mongoose.Schema(
   {
     key: {
       type: String,
-      required: true, // unique identifier for file (e.g., filename or S3 key)
+      required: true,
+      trim: true,
+    },
+    filename: {
+      type: String,
+      trim: true,
+    },
+    originalName: {
+      type: String,
       trim: true,
     },
     url: {
-      type: String, // public URL to access the file
+      type: String,
       trim: true,
     },
-    size: {
-      type: Number, // in bytes
-    },
+    size: Number,
     mimetype: {
       type: String,
       trim: true,
+    },
+    contentType: {
+      type: String,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ["uploaded", "failed"],
+      default: "uploaded",
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -28,9 +43,7 @@ const fileSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    deletedAt: {
-      type: Date,
-    },
+    deletedAt: Date,
     deletedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -39,13 +52,17 @@ const fileSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    profileImage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "File",
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
-// Index for faster soft-delete lookups
+// Index for soft deletion
 fileSchema.index({ deleted: 1 });
 
 const File = mongoose.model("File", fileSchema);
-
 module.exports = File;

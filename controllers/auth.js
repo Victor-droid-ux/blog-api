@@ -4,6 +4,10 @@ const comparePassword = require("../utils/comparepassword");
 const generateToken = require("../utils/generateToken");
 const generateCode = require("../utils/generateCode");
 const sendEmail = require("../utils/sendEmail");
+//const File = require("../models/User");
+const handleMongoError = require("../helpers/mongoErrorHandler");
+const { uploadMultipleFiles, signedUrl } = require("../utils/awsS3");
+const File = require("../models/file");
 
 const signup = async (req, res, next) => {
   try {
@@ -14,7 +18,9 @@ const signup = async (req, res, next) => {
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters." });
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters." });
     }
 
     const isEmailExist = await User.findOne({ email });
@@ -35,7 +41,7 @@ const signup = async (req, res, next) => {
       message: "New user has been registered successfully",
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -56,7 +62,7 @@ const login = async (req, res, next) => {
       token,
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -66,7 +72,9 @@ const sendVerificationCode = async (req, res, next) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
     if (user.verificationCode) {
-      return res.status(400).json({ message: "Verification code already sent" });
+      return res
+        .status(400)
+        .json({ message: "Verification code already sent" });
     }
 
     const code = generateCode(6);
@@ -84,7 +92,7 @@ const sendVerificationCode = async (req, res, next) => {
       message: "Verification code sent successfully",
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -109,7 +117,7 @@ const verifyUser = async (req, res, next) => {
       token,
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -138,7 +146,7 @@ const forgotPasswordCode = async (req, res, next) => {
       message: "Code sent successfully",
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -162,7 +170,7 @@ const resetPassword = async (req, res, next) => {
       message: "Password reset successfully",
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
@@ -178,11 +186,15 @@ const changePassword = async (req, res, next) => {
     }
 
     if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ message: "New password must be at least 6 characters" });
+      return res
+        .status(400)
+        .json({ message: "New password must be at least 6 characters" });
     }
 
     if (newPassword === currentPassword) {
-      return res.status(400).json({ message: "New password must be different" });
+      return res
+        .status(400)
+        .json({ message: "New password must be different" });
     }
 
     user.password = await hashpassword(newPassword);
@@ -193,16 +205,22 @@ const changePassword = async (req, res, next) => {
       message: "Password changed successfully",
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
   }
 };
 
 const updateProfile = async (req, res, next) => {
   try {
-    const { email, username } = req.body;
+    const { email, username, profileImage } = req.body;
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // Prevent empty updates
+    if (!email && !username && !profileImage && !req.file) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    // Email change resets verification
     if (email && email !== user.email) {
       user.email = email;
       user.isVerified = false;
@@ -210,9 +228,49 @@ const updateProfile = async (req, res, next) => {
 
     if (username) user.username = username;
 
+    // ✅ Handle image uploads via S3
+    if (req.file) {
+      const s3UploadResult = await uploadMultipleFiles({ files: [req.file] });
+      const uploadedFile = s3UploadResult[0];
+
+      const savedFile = await File.create({
+        originalName: uploadedFile.originalName,
+        filename: uploadedFile.filename,
+        mimetype: uploadedFile.mimetype,
+        contentType: uploadedFile.contentType,
+        key: uploadedFile.key,
+        url: uploadedFile.url,
+        size: uploadedFile.size,
+        createdBy: req.user._id,
+      });
+
+      user.profileImage = savedFile._id;
+    } else if (profileImage) {
+      user.profileImage = profileImage; // Already an ObjectId maybe
+    }
+
+    user.isVerified = true;
     await user.save();
 
-    res.status(200).json({
+    // ✅ Generate image URL from File
+    let imageUrl = "";
+
+    if (user.profileImage) {
+      try {
+        const imageFile = await File.findById(user.profileImage);
+
+        if (imageFile?.url) {
+          imageUrl = imageFile.url;
+        } else if (imageFile?.key) {
+          imageUrl = await signedUrl(imageFile.key);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile image:", err);
+        imageUrl = "";
+      }
+    }
+
+    return res.status(200).json({
       status: true,
       message: "Profile updated",
       user: {
@@ -220,10 +278,67 @@ const updateProfile = async (req, res, next) => {
         email: user.email,
         username: user.username,
         role: user.role,
+        profileImage: imageUrl,
       },
     });
   } catch (error) {
-    next(error);
+    return handleMongoError(error, res);
+  }
+};
+
+const currentUser = async (req, res, next) => {
+  try {
+    const { _id } = req.user;
+
+    const user = await User.findById(_id)
+      .select("=password =verificationCode =forgotPasswordCode")
+      .populate("profileImage")
+      .populate({
+        path: "categories",
+        select: "title name description createdAt updatedAt",
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        code: 404,
+        status: false,
+        message: "User not found",
+      });
+    }
+
+    // Fetch uploaded files by the user
+    const uploadedFiles = await File.find({
+      createdBy: _id,
+      deleted: false,
+    }).select("originalName filename url key size status createdAt");
+
+    // Resolve profile image
+    let imageUrl = "";
+    if (user.profileImage) {
+      imageUrl =
+        user.profileImage.url || (await signedUrl(user.profileImage.key));
+    }
+
+    return res.status(200).json({
+      code: 200,
+      status: true,
+      message: "Current user fetched successfully",
+      user: {
+        _id: user._id,
+        email: user.email,
+        username: user.username,
+        password: user.password, // Don't return password in response
+        role: user.role,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        profileImage: imageUrl,
+        categories: user.categories || [],
+        files: uploadedFiles || [],
+      },
+    });
+  } catch (error) {
+    return handleMongoError(error, res);
   }
 };
 
@@ -236,4 +351,5 @@ module.exports = {
   resetPassword,
   changePassword,
   updateProfile,
+  currentUser,
 };

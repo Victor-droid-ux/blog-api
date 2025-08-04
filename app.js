@@ -36,4 +36,19 @@ app.use(/.*/, notfound);
 // Global error handler
 app.use(errorHandler);
 
+app.use((err, req, res, next) => {
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern || {})[0] || "field";
+    return res.status(400).json({
+      status: false,
+      message: `Duplicate value for ${field}`,
+    });
+  }
+
+  res.status(500).json({
+    status: false,
+    message: err.message || "Server error",
+  });
+});
+
 module.exports = app;

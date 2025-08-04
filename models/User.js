@@ -1,36 +1,50 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
-const UserSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
+const UserSchema = new mongoose.Schema(
+  {
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6,
+    },
+    role: {
+      type: Number,
+      default: 3, // Default role set to 3 (user)
+    },
+    profileImage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "File",
+      default: null,
+    },
+    verificationCode: String,
+    forgotPasswordCode: String,
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    categories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+      },
+    ],
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  role: {
-    type: Number,
-    default: 3 // Default role set to 3 (user)
-  },
-  verificationCode: String,
-  forgotPasswordCode: String,
-  isVerified: {
-    type: Boolean,
-    default: false
-  }
-}, { timestamps: true });
+  { timestamps: true }
+);
 
 // ✅ Instance method to compare passwords
 UserSchema.methods.comparePassword = async function (userPassword) {
@@ -41,11 +55,14 @@ UserSchema.methods.comparePassword = async function (userPassword) {
 UserSchema.methods.generateAuthToken = function () {
   const token = jwt.sign(
     { _id: this._id, email: this.email, role: this.role },
-    process.env.JWT_SECRET || 'default_secret',
-    { expiresIn: '7d' }
+    process.env.JWT_SECRET || "default_secret",
+    { expiresIn: "7d" }
   );
   return token;
 };
 
-const User = mongoose.model('User', UserSchema);
+//UserSchema.index({ username: 1 }, { unique: true });
+//UserSchema.index({ email: 1 }, { unique: true });
+
+const User = mongoose.model("User", UserSchema);
 module.exports = User;
